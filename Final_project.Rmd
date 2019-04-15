@@ -1,0 +1,647 @@
+---
+title: "Underdispersion in count data"
+author: "Eugenio Bonifazi"
+output: 
+  bookdown::pdf_document2: default
+bibliography: biblio.bib
+citations: TRUE
+nocite: | 
+  @sellers2012poisson, @yildirim2012bayesian
+---
+
+```{r, include=FALSE, echo=FALSE}
+rm(list=ls())
+library(Countr)
+library(dplyr)
+library(xtable)
+library(knitr)
+library(kableExtra)
+library(mcmc)
+library(mcmcplots)
+library(bayesplot)
+library(ggplot2)
+library(scales)
+source("functions.R")
+set.seed(1945)
+```
+
+
+# Dispersion in count data
+
+## Introduction 
+
+In data analysis and in many disciplines, count data have become widely avaliable. 
+The most popular distribution for modelling count data is the Poisson distribution but still, many real data do not adhere to the assumption of equidispersion that is underlined in the Poisson distribution. As a matter of fact, the Poisson distribution:
+\[
+f_x(x)=P(X=x|\lambda)= \frac{\lambda^{x}e^{-\lambda}}{x!}
+\]
+
+has the expected value equal to the variance, $E(X)=Var(X)=\lambda$ with $X\sim Pois(\lambda)$.
+
+However, as mentioned above, in real application count data frequently exhibit underdispersion or overdispersion, which is the most frequent relashionship recognized among real datasets. For this reason overdispersion has been long studied and also its manners are generally well understood, including its causes and various distributions established that allow to model overdispersed data in an appropriate way (like the Negative Binomial). Overdispersion describes higher variance than expected, while underdispersion, on its turn, is related to a deficient variation in count data [@sellers2017underdispersion]. 
+
+This work focuses on underdispersion and it's constitued by three section: this introductory section on underdispersion; a second part in which we'll present an algorithm that allows you to make bayesian inference on COM-Poisson distribution and regression and, in the end, we'll apply this algorithm to estimate COM-Poisson's posterior parameters as well as regression's coefficients.
+In the session below a list of distributions, mainly derived from the Poisson, that address underdispersion are presented. This list includes a one parameter distribution, the condensed Poisson, and some distributions with two parameters that give us the capability to estimate a scale and a dispersion parameter separetely [@sellers2017underdispersion has been taken as reference].
+
+\newpage
+
+## Distributions that address underdispersion
+
+* __Condensed Poisson__ 
+
+The condensed poisson (CP) is a one-parameter count data distribution that express data underdispersion. It is used to examine the number of events occurring over a certain period of time. Assuming that the interarrival time follows an $Erlang(2, \lambda)$ then, $Y$ has a $CP(\lambda)$ distribution with probability mass function:
+\[
+P(Y=y \mid \lambda)=\begin{cases}
+      e^{-\lambda} \big(1 + \frac{\lambda}{2}\big)     & \quad y=0\\
+    e^{-\lambda} \bigg( \frac{\lambda^{2y-1}}{2(2y-1)!} + \frac{\lambda^{2y}}{(2y)!} + \frac{\lambda^{2y+1}}{2(2y+1)!}\bigg)  & \quad y=1, 2, 3, ...
+  \end{cases}
+\]
+
+The close forms of mean and variance is:
+\[
+E(Y)=\frac{\lambda}{2} \quad \text{and } \quad Var(Y)=\frac{\lambda + e^{-\lambda}sinh(\lambda)}{4}
+\]
+
+By definition the variance is less than the mean for all $\lambda$.
+
+There are several two-parameter distributions that have the Poisson model as special case and have the ability to model both over- and underdispersion through the associated dispersion parameter. Below some examples.
+
+
+* __Generalized Poisson__
+ 
+@famoye1995bivariate introduced the generalized Poisson (GP) distribution with pmf:
+\[
+P(Y=y\mid \mu, \theta)=\begin{cases}
+\frac{\mu(\mu+\theta)^{y-1}e^{-\mu-\theta y}}{y!}   & \quad y=0,1,2,... \\
+0 \quad \text{for } y>m, \quad \text{when }\theta<0
+\end{cases}
+\]
+
+where $\mu>0$ and $max(-1, \mu/4)< \theta \leq 1$.
+
+The direct proportionality restriction, $\theta=\phi \mu$, produces a restricted generalized Poisson, $RGP(\mu, \phi)$, with rate paramter $\mu$ and dispersion parameter $\phi$. A random variable $Y\sim RGP(\mu, \phi)$ has the probability mass function:
+\[
+P(Y=y\mid \mu, \phi)=\begin{cases}
+\frac{\mu^{y}(1+\phi y)^{y-1}e^{-\mu(1+\phi y)}}{y!}   & \quad y=0,1,2,... \\
+0 \quad \text{for } y>m, \quad \text{when }\phi<0
+\end{cases}
+\]
+
+This distribution has the Poisson as special case, when $\phi = 0$. But, of course, it handles data over- or underdispersion for $\phi>0$ or $\frac{-2}{\lambda}<\phi<0$ respectively. The RGP model has a closed form mean and variance:
+
+\[
+E(Y)=\lambda \quad \text{and} \quad Var(Y)=\lambda(1+\lambda \phi)^2
+\]
+
+
+* __Gamma Count__
+
+@winkelmann2008econometric introduced a gamma count distribution based on a difference of incomplete gamma functions. More precisely, $Y\sim GC(\lambda, \alpha)$  has pmf:
+\[
+P(Y=y \mid \alpha, \lambda) = Gamma(\alpha y, \lambda) - Gamma(\alpha y + \alpha, \lambda) \quad \quad y=0,1,2,...
+\]
+where 
+\[
+Gamma(\alpha y, \lambda)= \begin{cases}
+1 & y=0 \\
+\frac{1}{\Gamma(\alpha y)}\int_{0}^{\lambda}u^{\alpha y-1}e^{-u}du  & y=1,2,3,...
+\end{cases}
+\]
+
+When $\alpha=1$ we are in the special case of the $Poisson(\lambda)$. This model, on its turn, captures data over- and underdispersion when $0<\alpha<1$ or $\alpha>1$ respectively. The GC has not closed form moments, but we can compute them as:
+\[
+E(Y)=\sum_{y=1}^{\infty}y\cdot Gamma(\alpha y, \lambda)
+\]
+\[
+Var(Y)= \sum_{y=1}^{\infty}y^2\cdot [Gamma(\alpha y, \lambda)-Gamma(\alpha y +\alpha, \lambda)]-(E(Y))^2.
+\]
+
+
+* __Double Poisson__ 
+
+By definition, $Y\sim DP(\lambda, \theta)$ is a double Poisson with probability mass function:
+\[
+P(Y=y\mid \lambda, \theta)=c(\lambda, \theta)(\theta^{-1/2}e^{-\theta \lambda})\bigg( \frac{e^{-y}y^y}{y!}\bigg)\bigg(\frac{e\lambda}{y} \bigg)^{\theta y} \quad \quad y=0,1,2,...
+\]
+where 
+\[
+\frac{1}{c(\lambda, \theta)}=\sum_{y=0}^{\infty}(\theta^{-1/2}e^{-\theta \lambda})\bigg( \frac{e^{-y}y^y}{y!}\bigg)\bigg(\frac{e\lambda}{y} \bigg)^{\theta y} \approx 1+ \frac{1-\theta}{12 \lambda \theta} \bigg( 1 + \frac{1}{\lambda \theta}\bigg)
+\]
+
+defines the normalizing constant. The double Poisson, likewise the previous examples, has the $Poisson(\lambda)$ for $\theta=1$ and models over- or underdispersion for $0<\theta<1$ or $\theta>1$ respectively. It has mean and variance equal to:
+\[
+E(Y) = \lambda \quad \text{and} \quad Var(Y) = \frac{\lambda}{\theta}
+\]
+
+
+
+* __Conway-Maxwell-Poisson__
+
+The Conway-Maxwell-Poisson (COM-Poisson) distribution is a generalization of the Poisson distribution that has pmf:
+\[
+P(Y=y\mid \mu, \nu)=\bigg(\frac{\mu^y}{y!}\bigg)^{\nu}\cdot\frac{1}{Z(\mu, \nu)}, \quad \quad y=0,1,2,...
+\]
+
+where $Z(\mu, \nu)=\sum_{i=0}^{\infty}\big(\frac{\mu^i}{i!}\big)^\nu$ is a normalizing constant. For a given $Y\sim CMP(\mu, \nu)$ we have $\mu=E(Y^{\nu})$ and the dispersion parameter, $\nu$, that expresses the amount of over- or underdispersion, $\nu<1$ and $\nu>1$ respectively. On the other hand, $\nu=1$ implies that equidispersion exists and this entails that, for such value of $\nu$, the COM-Poisson is equal to the Poisson distribution. The Conway-Maxwell-Poisson distribution covers other well known distributions such as gemetric ($\nu=0$, $\mu <1$) and Bernoulli ($\nu \to \infty$ with probability $\frac{\mu}{1+\mu}$), some example are shown in a plot at the end of this paragraph.
+
+Taking into account the original parametrization of the COM-Poisson, that can be obtained by replacing $\mu$ by $\lambda^{\frac{1}{\nu}}$, the moment generating function of Y is $M_Y(t)=E(e^{Yt})=\frac{Z(\lambda e^{t}, \nu)}{Z(\lambda, \nu)}$, from which we can obtain the moments and, in particular, expected value and variance:
+ 
+\[
+E(Y)=\lambda \frac{\partial logZ(\lambda, \nu)}{\partial\lambda}\approx \lambda^{1/\nu}- \frac{\nu-1}{2\nu}; \quad 
+Var(Y)=\frac{\partial E(Y)}{\partial log\lambda}\approx \frac{1}{\nu}\lambda^{1/\nu}
+\]
+
+The normalizing constant $Z(\mu, \nu)$ doesn't have a close form and it has to be approximated. Hence not only the regression's coefficients, for both frequentist and Bayesian approaches, but also sampling from the parameter's posterior distribution requires the evaluation of the normalizing constant $Z(\mu, \nu)$. However, there are some methods that allow us to sample from a certain distribution without evaluating the normalizing constant and, in the following paragraph, we'll take into account one of them. 
+
+```{r, echo=FALSE}
+
+x = seq(0,15, by = 1)
+lambda_vec = c(2,2,2,0.5)
+nu_vec = c(1, 0.5, 1.5, 0)
+
+
+
+colors <- c("red3", "blue1", "lightblue3", "lightgreen")
+lab = c("Poisson(2) - CMP(2,1)","overdispersed CMP(2,0.5)" ,"underdispersed CMP(2,1.5)",
+        "Geometric - CMP(0.5,0)")
+
+plot(x, dcomp(x, lambda_vec[1], nu_vec[1]), col = colors[1], type = "b",
+     lwd = 2, lty = 1, main = "Particular cases of COM-Poisson", xlab = "x",
+     ylab = "density", xlim = c(0,15), ylim = c(0,.55))
+
+lines(x, dcomp(x, lambda_vec[2], nu_vec[2]), col = colors[2],lwd = 2, lty = 1, type = "b")
+lines(x, dcomp(x, lambda_vec[3], nu_vec[3]), col = colors[3],lwd = 2, lty = 1, type = "b")
+lines(x, dcomp(x, lambda_vec[4], nu_vec[4]), col = colors[4],lwd = 2, lty = 1, type = "b")
+
+legend(x=10, y=0.53, title = "Distributions", lab, lwd = 1, 
+       lty = 1, col = colors, cex = .5)
+
+```
+
+
+\newpage
+# Exchange algorithm 
+
+This section exhibits a method for sampling from the COM-Poisson distribution without having to evaluate the normaliziong constant. We consider the exchange algorithm proposed by @moller2006efficient and used by @chanialidis2018efficient. This algorithm is a version of the Metropolis-Hastings algorithm designed for cases in which the likelihood function contains an intractable normalizing constant that is a function of the parameters. 
+This algorithm is presented below and it is also compared with the standard Metropolis-Hastings.
+
+
+## Exchange algorithm vs Metropolis Hastings
+
+The exchange algorithm has the same procedure of the Metropolis Hastings and they are both Monte-Carlo Markov Chain based; however they differ for the structure of the acceptance probability, but let's proceed step by step.
+As we know, having a sampling model with probability mass function $p(y\mid \theta)$ conditioned on a parameter $\theta$ that has prior distribution $\theta \sim p(\theta)$, the **Metropolis Hastings algorithm** proceeds as follows:
+
+1. Initiate $\theta^{(0)}\sim p(\theta)$
+  Then, **for** each iteration $i=1,2,...,n$ :
+2. Generate $\theta^{\star}\sim p(\theta)$
+3. Take $r=min\{a,1\}$ with 
+\[
+a=\frac{p(y\mid \theta^{\star})p(\theta^{\star})}{p(y\mid \theta^{i-1})p(\theta^{i-1})}
+\]
+4. Generate $u\sim Unif(0,1)$, if $u<r$:
+\[\theta^{(i)}=\theta^{\star}\]
+    else:
+\[\theta^{(i)}=\theta^{i-1}\]   
+
+This is the standard Metropolis Hastings. If we are dealing with a sampling model with probability mass function $p(y\mid \theta)=\frac{q_{\theta}(y)}{Z(\theta)}$ in which $q_{\theta}(y)$ is the unnormalized probability density and the normalisation constant $Z(\theta)=\sum_{y}=q_{\theta}(y)$ or $Z(\theta)=\int q_{\theta}(y)dy$ is unknown, the acceptance probability becomes:
+
+\[
+a=\frac{\bigg(\prod_i \frac{q_{\theta^{\star}}(y^{\star}) }{Z(\theta^{\star})}\bigg)p(\theta^{\star})}
+{\bigg(\prod_i \frac{q_{\theta}(y) }{Z(\theta)}\bigg)p(\theta)}
+\]
+
+The idea behind the exchange algorithm is to enlarge the state of the Markov chain to include, beside the parameter $\theta$, an auxiliary variable $y^{\star}$ defined in the same sample space of $y=(y_1,...y_n)$. 
+For each update of the MCMC, first a candidate parameter $\theta^{\star}$ is generated from the proposal distribution of the parameter $\theta$ (that is supposed to be a simmetric distribution); then the auxiliary data $y^{\star}$ are drown from the sampling model $p(y^{\star}\mid\theta^{\star})$, conditional on the parameter value [@chanialidis2018efficient].
+Hence, in the exchange algorithm we have:
+
+\[
+a = \frac{p(y\mid \theta^{\star})p(\theta^{\star})p(y^{\star}\mid \theta)}{p(y\mid \theta)p(\theta)p(y^{\star}\mid \theta^{\star})} 
+\]
+\[
+= \frac{\bigg[\prod_i\frac{q_{\theta^{\star}}(y_i)}{Z(\theta^{\star})} \bigg] p(\theta^{\star})\bigg[\prod_i\frac{q_{\theta}(y^{\star})}{Z(\theta)} \bigg]}
+{\bigg[\prod_i\frac{q_{\theta}(y_i)}{Z(\theta)} \bigg] p(\theta^{\star})\bigg[\prod_i\frac{q_{\theta^{\star}}(y^{\star})}{Z(\theta^{\star})} \bigg]}
+\]
+\[
+= \frac{\big[\prod_i q_{\theta^{\star}}(y_i) \big] p(\theta^{\star})\big[\prod_i q_{\theta}(y^{\star}) \big]}
+{\big[\prod_iq_{\theta}(y_i) \big] p(\theta)\big[\prod_i q_{\theta^{\star}}(y^{\star}) \big]}
+\]
+  
+Remarking the difference between the two algorithms we can see how the acceptance ratio _a_ for the standard Metropolis-Hastings involves the ratio of the normalization constants $\frac{Z(\theta)}{Z(\theta^{\star})}$, while in the exchange algorithm the ratio $\frac{Z(\theta)}{Z(\theta^{\star})}$ cancels out and it is replaced by $\frac{q_{\theta}(y_i^{\star})}{q_{\theta^{\star}}(y_i^{\star})}$; this suggests that the latter can be thought as an importance sampling estimate of the former.
+
+## The COM-Poisson case
+
+In this part we'll take into account more closely the exchange algorithm in the case considered in this work, i.e. COM-Poisson's parameters estimate, giving some more specifications about the model and the distributions involved in the procedure. 
+First we have to specify the distribution of the unnormalized probability densities that are nothing more than the COM-Poisson density without the normalizing constant:
+
+\[ q_{\theta_i}(y_i)=\Bigg( \frac{\mu_{i}^{y_i}}{y_i!} \Bigg)^{\nu_i}, \quad q_{\theta_i^{\star}}(y_i)=\Bigg( \frac{(\mu_{i}^{\star})^{y_i}}{y_i!} \Bigg)^{\nu_i^{\star}}\]
+\[ q_{\theta_i}(y_i^{\star})=\Bigg( \frac{\mu_{i}^{y_i^{\star}}}{y_i^{\star}!} \Bigg)^{\nu_i}, \quad q_{\theta_i^{\star}}(y_i^{\star})=\Bigg( \frac{(\mu_{i}^{\star})^{y_i^{\star}}}{y_i^{\star}!} \Bigg)^{\nu_i^{\star}}\]
+
+Of course these probability densities come from the same distribution but they refer to all the possible values this distribution assumes in the exchange algorithm's acceptance probability that are, from left to right, respect to:
+un-updated values of the parameter and the vector of data, updated parameters and observed data, un-updated parameters and simulated data ($y^{\star}$) and updated parameters, $\theta^{\star}$, and simulated data, respectively.
+
+As we previously said, with the exchange algorithm we want to estimate the posterior distribution via MCMC sampling without computing the likelihood function (that is computationally hard because of the normalisation constant). 
+We clarified the part related to the likelihood, namely the COM-Poisson probability distribution, and now is the turn the parameters' prior distribution.
+Indeed the Conway-Maxwell-Poisson distribution depends on two parameters, $\mu$ and $\nu$. Assuming $\mu\sim p(\mu)$ and $\nu\sim p(\nu)$ and the indipendence of the two parameter's prior distributions, we finally have:
+
+\[
+a = \frac{\big[\prod_i q_{\theta^{\star}}(y_i) \big] p(\mu^{\star}) p(\nu^{\star})\big[\prod_i q_{\theta}(y^{\star}) \big]}
+{\big[\prod_iq_{\theta}(y_i) \big] p(\mu)p(\nu)\big[\prod_i q_{\theta^{\star}}(y^{\star}) \big]}
+\]
+
+where $\theta=(\mu, \nu)$.
+
+\newpage
+# Applications
+
+The last part of this work is composed by two sections: in the first one we'll provide two applications of the exchange algorithm, the former applying the algorithm on random generated data and the latter using real data; in the second section we'll apply the exchange algorithm in order to estimate regression's coefficients. 
+For the second analysis I used the R package *combayes* implemented by Chanialidis [@combayes], still following the idea of the exchange algorithm but, in this case, used to compute an estimation of the regression's coefficients (we'll go into the details further).
+
+## Posterior COM-Poisson's parameters estimate 
+
+The implementation of the algorithm proposed below has been designed just for the case of a $CMP(\mu,\nu)$ likelihood distribution with normal prior on the parameters' distribution, that are: $\mu\sim N(\mu_{n_1},\tau_{n_1}^2)$ and $\nu\sim N(\mu_{n_2},\tau_{n_2}^2)$; according with the Metropolis Hastings' hypothesis of symmetric prior distribution.
+The functions _a_ratio_ and _q_ are the acceptance probability and the unnormalized density, respectively:
+
+\[
+a = \frac{\big[\prod_i q_{\theta^{\star}}(y_i) \big] p(\mu^{\star}) p(\nu^{\star})\big[\prod_i q_{\theta}(y^{\star}) \big]}
+{\big[\prod_iq_{\theta}(y_i) \big] p(\mu)p(\nu)\big[\prod_i q_{\theta^{\star}}(y^{\star}) \big]},
+\quad
+q(y\mid\mu,\nu)=\Bigg(\frac{\mu^{y}}{y!} \Bigg)^{\nu}
+\]
+
+Below the R functions' code.
+
+```{r}
+
+#   exchange.alg <- function(nsim, y, likelihood_par=list(n, mu, nu),
+#                          prior.mu_par=list(mu, sd), prior.nu_par=list(mu, sd)){
+#   
+#   acc = 0
+#   mu = rep(NA,nsim)
+#   nu = rep(NA,nsim)
+#   yres = rep(NA,nsim)
+#  yres[1] = rcomp(likelihood_par$n, likelihood_par$mu, likelihood_par$nu)
+#   mu_cand = 0
+#   nu_cand = 0
+#   mu[1] = mu_cand
+#   nu[1] = nu_cand
+#   
+#   for(i in 2:nsim){
+#     mu_cand = rnorm(n=1, prior.mu_par$mu, prior.mu_par$sd)
+#     nu_cand = rnorm(n=1, prior.nu_par$mu, prior.nu_par$sd)
+#     while (mu_cand<=0){
+#       mu_cand = rnorm(n=1, prior.mu_par$mu, prior.mu_par$sd)
+#     }
+#     while (nu_cand<=0){
+#       nu_cand <- rnorm(n=1, prior.nu_par$mu, prior.nu_par$sd)
+#     }
+#     
+#     y_star = rcomp(likelihood_par$n, likelihood_par$mu, likelihood_par$nu)
+#     
+#     a = a_ratio(y, y_star, mu[i-1], nu[i-1], mu_cand, nu_cand, 
+#                 prior.mu_par=prior.mu_par, prior.nu_par=prior.nu_par)
+#     
+#     
+#     r = min(exp(a),1)
+#     u = runif(1)
+#     
+#     if(u<r){
+#       mu[i] = mu_cand
+#       nu[i] = nu_cand
+#       yres[i] = y_star
+#       acc = acc + 1/nsim
+#     }
+#     else{
+#       mu[i] = mu[i-1]
+#       nu[i] = nu[i-1]
+#       yres[i] = yres[i-1]
+#     }
+#   }
+#   result = list(mu_acc = mu, nu_acc = nu, yres = yres, acc = acc*100)
+#   return(result)
+# }
+
+```
+
+```{r}
+
+#  a_ratio <- function(y, y_star, mu, nu, mu_cand, nu_cand, 
+#  prior.mu_par=list(mu, sd), prior.nu_par=list(mu, sd)){
+#   
+#   a = sum(log(q(y, mu_cand, nu_cand))+log(q(y_star, mu, nu)) 
+#           + log(dnorm(mu_cand, prior.mu_par$mu, prior.mu_par$sd)) 
+#           + log(dnorm(nu_cand, prior.nu_par$mu,prior.nu_par$sd))
+#           -log(q(y, mu, nu)) - log(q(y_star, mu_cand, nu_cand)) 
+#           - log(dnorm(mu, prior.mu_par$mu, prior.mu_par$sd)) 
+#           - log(dnorm(nu, prior.nu_par$mu,prior.nu_par$sd)))
+#  }
+# 
+# q <- function(y, mu, nu) (mu^y/factorial(y))^nu
+
+```
+
+
+### Simulated data
+
+In this first example we have a vector of data, $y=y_1,...,y_n$ generated from a COM-Poisson $Y\sim CMP(2.5, 5)$ of size $n=1500$. This is an underdispersed sample; indeed, we have $\bar{y}=1.12$ and $Var(y)=0.61$.
+We want to see if we can estimate the true posterior prameters of the Conway-Maxwell-Poisson, $\mu$ and $\nu$, via exchange algorithm choosing suitable priors on the parameters' distributions. 
+
+The algoritm is applied three times with different priors on the parametars:
+
+1. We choose completely uninformative priors, i.e.:
+\[
+\mu\sim N(0,100), \quad \nu\sim N(1,100)
+\]
+2. Normal priors centered on the true-value of the sampling distribution, with small variabilily with respect to it:
+\[
+\mu\sim N(2.5,1), \quad \nu\sim N(5,1)
+\]
+3. Normal priors centered on the true-value of the sampling distribution but with a greater variance with respect to the previous case:
+\[
+\mu\sim N(2.5,4), \quad \nu\sim N(5,4)
+\]
+An histogram of the simulated COM-Poisson data is shown below.
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+y_fake = rcomp(1500, 2.5, 5)
+hist(y_fake, probability = T, breaks = 15, col = "lightblue3", 
+     main = "Random sample from Y~CMP(2.5,5)", xlab = "x", ylab = "frequency")
+```
+
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+cmp_exc = exchange.alg(10000, y = y_fake, likelihood_par=list(n=1,mu=2.5, nu=5), prior.mu_par = list(mu=0, sd=10), prior.nu_par = list(mu=1,sd=10))
+
+cmp_exc1 = exchange.alg(10000, y = y_fake, likelihood_par=list(mu=2.5, nu=5), prior.mu_par = list(mu=2.5, sd=1),prior.nu_par = list(mu=5,sd=1))
+
+cmp_exc2 = exchange.alg(10000, y = y_fake,likelihood_par=list( mu=2.5, nu=5), prior.mu_par = list(mu=2.5, sd=2), prior.nu_par = list(mu=5,sd=2))
+
+```
+&nbsp;
+
+In the table you can detect the estimated values for $\mu$ and $\nu$ and the percentage of accepted values for each of the three experiments. In the first case we can see that we have a relatively high percentage of accepted values but, we can see at the same time, that the Monte Carlo Markov chain moves around values quite far away from the true ones. This beacause prior distributions are completely non informative, centered in zero and one, respectively, and with a very high variance; in other words it seems that in the chain we often reach points with an higher density with respect to the previous one (that makes a proposed value the right candidate to be accepted) but with a so high variability that does not allow the algorithm to catch the true distribution's parameters. 
+In the second and third case we have estimated values closer to the true ones and this is clearly due to the more informative prior distributions; we have, indeed, both priors centered on the true values of the distribution's parameters. However, the two cases present different percentages of accepted values: this can be explained by the different priors' variances. 
+In the former we have a lower variance ($\sigma^2=1$ instead of $\sigma^2=4$) and this implies that the proposed values tend to be accepted and the MCMC converges earlier than in the latter case and, hence, it's harder to have new viable candidates. Anyway, the higher variability of the last simulation seems to allow us in finding the closest values to the true ones.
+
+&nbsp;
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+b = rbind(c(round(mean(unique(cmp_exc$mu_acc)),2),round(mean(unique(cmp_exc1$mu_acc)),2),round(mean(unique(cmp_exc2$mu_acc)),2)), c(round(mean(unique(cmp_exc$nu_acc)),2), round(mean(unique(cmp_exc1$nu_acc)),2), round(mean(unique(cmp_exc2$nu_acc)),2)), c(round(cmp_exc$acc,2), round(cmp_exc1$acc,2), round(cmp_exc2$acc,2)))
+
+rownames(b)<-c(expression(mu),expression(nu), "accepted %")
+colnames(b)<-c("first trial" , "second trial", "third trial")
+kable(b) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "responsive")) %>%
+  add_header_above(c(" ","MCMC results"=3))
+```
+
+Below we have the traceplots of the first 1000 simulations for $\mu$ and $\nu$ related to the three different experiments; the flat periods in the black line represent not accepted candidates.
+
+\newpage
+__first simulation:__
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+exchange_alg.plot(cmp_exc)
+```
+\newpage
+__second simulation:__
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+exchange_alg.plot(cmp_exc1)
+```
+\newpage
+__third simulation:__
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+exchange_alg.plot(cmp_exc2)
+```
+
+### Fertility data
+
+In both this section and the following one we are using data coming from the dataset "Fertility Data" used by @winkelmann1995duration and avaliable in the R package *Countr*.
+
+The sample is formed by observation of 1243 women aged 44 or older in 1985 who answered the questions relevant to the analysis conducted by the German Socio-Economic Panel. The count variable children is the number of births per woman and is characterised by small underdispersion: the variance of the number of births is less than the mean, 2.33 versus 2.38. There are 8 possible explanatory variables: 3 continuous and 5 categorical [@fert_data].
+In this section we'll only use the "number of births" variable, assuming that these data come from a COM-Poisson. Since we want to estimate the posterior parameters and we don't know from which specific CMP data comes from, we have to make some assumption on it.
+Taking into account the histogram of birth data below, we can see that $\mu =3$ and $\nu=1.8$ can be acceptable values for our likelihood distribution. 
+
+&nbsp;
+
+```{r, echo=FALSE}
+data("fertility")
+
+x = seq(0,15, by = 1)
+y = fertility$children
+
+hist(y, breaks = 15, probability = T, col = "lightblue2", 
+     main = "Histogram of birth", xlab = "x", ylab = "prob", ylim = c(0,0.5))
+lines(x, dcomp(x, 3, 1.8), col = "red", lwd = 2, type = "b")
+legend(6,.5, legend = c("birth data", "empirical COM-Poisson(3, 1.8)"),
+      col = c("lightblue2", "red"), lwd = c(2,2), cex = .75)
+```
+
+&nbsp;
+
+```{r, echo=FALSE}
+cmp_exc = exchange.alg(10000, y = y, prior.mu_par = list(mu=0, sd=1),
+                       prior.nu_par = list(mu=0,sd=1))
+
+cmp_exc1 = exchange.alg(10000, y = y, prior.mu_par = list(mu=3, sd=1),
+                        prior.nu_par = list(mu=1.8,sd=1))
+
+cmp_exc2 = exchange.alg(10000, y = y, prior.mu_par = list(mu=3, sd=2),
+                        prior.nu_par = list(mu=1.8,sd=2))
+```
+
+At this point, as the previous case, the exchange algorithm is applied three times using different priors on the parameters' distributions. In this case, since we are assuming that data, $y=y_1,...,y_n$, come from a $CMP(3,1.8)$, at each step of the MCMC the vector $y^{\star}=y_1^{\star},...,y_n^{\star}$ is generated from this probability distribution.
+Let's take a closer look to the applied priors.
+
+1. We choose uninformative standard Normal priors, i.e.:
+\[
+\mu\sim N(0,1), \quad \nu\sim N(0,1)
+\]
+2. Normal priors centered on the true-value of the sampling distribution, with small variabilily with respect to it:
+\[
+\mu\sim N(3,1), \quad \nu\sim N(1.8,1)
+\]
+3. Normal priors centered on the true-value of the sampling distribution but with a greater variance with respect to the previous simulation:
+\[
+\mu\sim N(3,4), \quad \nu\sim N(1.8,4)
+\]
+
+Here the estimated posterior parameters via exchange algorithm.
+
+```{r, echo=FALSE}
+b = rbind(c(round(mean(unique(cmp_exc$mu_acc)),2),round(mean(unique(cmp_exc1$mu_acc)),2),round(mean(unique(cmp_exc2$mu_acc)),2)), c(round(mean(unique(cmp_exc$nu_acc)),2), round(mean(unique(cmp_exc1$nu_acc)),2), round(mean(unique(cmp_exc2$nu_acc)),2)), c(round(cmp_exc$acc,2), round(cmp_exc1$acc,2), round(cmp_exc2$acc,2)))
+
+rownames(b)<-c(bquote(mu), bquote(nu), "accepted %")
+colnames(b)<-c("first trial" , "second trial", "third trial")
+kable(b) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "responsive")) %>%
+  add_header_above(c(" ","MCMC results"=3))
+```
+
+The *MCMC results* table shows us different outcomes for the three exmeriments. 
+Indeed, for the uninformative priors case, we have a very low percentage of accepted candidates (displayed also in the trace plots at the end of the paragraph) and unsuitable estimated values of the posterior parameters.
+
+Taking into account the second and the third simulation, we observe how the percentage of accepted values of candidates $\mu^{\star}$,$\nu^{\star}$increases with a greater variance set for the priors. The estimated values of the parameters are $(\bar{\mu}=3.4,\bar{\nu}=2)$ and $(\bar{\mu}=4.1,\bar{\nu}=2.6)$, respectively. 
+We can say that the estimated parameters have greater values than the ones we assumed for the likelihood. 
+The second estimate seems to be the one that better fits data distribution, while the last one over-estimates the modal value. 
+
+&nbsp;
+
+```{r, echo=FALSE}
+hist(y, breaks = 15, probability = T, col = "lightblue2", 
+     main = "Birth data and estimated COM-Poisson distributions", xlab = "x", ylab = "prob", ylim = c(0,0.5))
+
+lines(x, dcomp(x, 4.1, 2.6), col = "red", lwd = 2, type = "b")
+lines(x, dcomp(x, 3.4, 2), col = "darkgreen", lwd = 2, type = "b")
+legend(7,.5, legend = c("Birth data","CMP(3.4,2)", "CMP(4.1,2.6)"),
+      col = c("lightblue2","darkgreen","red"), lwd = c(2,2,2), cex = .75)
+```
+
+\newpage
+__first simulation:__
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+exchange_alg.plot(cmp_exc)
+```
+\newpage
+__second simulation:__
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+exchange_alg.plot(cmp_exc1)
+```
+\newpage
+__third simulation:__
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+exchange_alg.plot(cmp_exc2)
+```
+
+
+
+
+\newpage
+
+## COM-Poisson regression 
+
+```{r, echo=FALSE}
+load("/Users/eugeniobonifazi/Documents/DATA_SCIENCE/1st_Year/2nd_sem/Tardella /Final Project/compreg_results.RData")
+```
+
+This last part regards a regression analysis based on the algorithm proposed by @chanialidis2018efficient and implemented in the *cmpoisreg* R function (@combayes). The COM-Poisson  model that we are taking into account is defined by @guikema2008flexible and it has the following form:
+\[
+P(Y_i = y_i\mid \mu_i,\nu_i)=\Bigg( \frac{\mu_i^{y_i}}{y_i!}\Bigg)^{\nu_i}\frac{1}{Z(\mu_i,\nu_i)}, 
+\]
+\[
+log(\mu_i)=x_i^{T}\beta \implies E[Y_i]\approx \text{exp} \{ x_i^{T}\beta\}, \\
+\]
+\[
+log(\nu_i)=-x_i^{T}\delta \implies V[Y_i]\approx \text{exp} \{ x_i^{T}\beta+x_i^{T}\delta \}
+\]
+
+where $Y$ is the dependent random variable that has to be modeled, while $\beta$ and $\delta$ are the regression coefficients for the centring and the shape parameters.
+
+For the COM-Poisson regression model, the acceptance ratio considered for the exchange algorithm becomes:
+\[
+a = \frac{\big[\prod_i q_{\theta^{\star}}(y_i) \big] p(\beta^{\star}) p(\delta^{\star})\big[\prod_i q_{\theta}(y^{\star}) \big]}
+{\big[\prod_iq_{\theta}(y_i) \big] p(\beta)p(\delta)\big[\prod_i q_{\theta^{\star}}(y^{\star}) \big]}
+\]
+
+where $\theta=(\beta, \delta)$. In the sampler, two different kinds of moves are applied, in order to reduce the correlation between successive samples of the regression coefficients $\beta$ and $\delta$. Each sweep of the MCMC sampler performs these two moves in a sequence. The first proposes a move from $\beta$ to $\beta^{\star}$ and afterwards from $\delta$ to $\delta^{\star}$. The second proposes a move from $(\beta_i,\delta_i)$ to $(\beta_i^{\star},\delta_i^{\star})$ for $i=1,..,p$, where p is the number of indipendent variables [@chanialidis2018efficient]. The prior distributions for $\beta$ and $\delta$ are both $N(\mu_p, \Sigma)$, where $\mu$ is a p-dimentional vector of zeroes and $\Sigma=I_p\cdot100$. 
+
+The covariates are the following:
+
+* *German*: equal 1 if the woman is German, else 0;
+* *schooling*: measured as years of schooling;
+* *vocational education*: Equals 1 if the woman had vocational training, else 0;
+* *University*: Equals 1 if the woman had university degree, else 0;
+* *age*: age of the woman at the time of the survey;
+* *rural*: Equals 1 if the woman lives in a rural area, else 0;
+* *age at marriage*: Age of the woman at the time of marriage;
+* *Religion*: The woman's religious denomination (Catholic, Protestant, Muslim).
+
+The variable *Religion* has been transformed into three binary variables corresponding to Catholic, Protestant and Muslim religions, respectively.
+
+In the following table you can see the percentage of the candidates accepted by the algorithm for both first and second move in the simulation (singular and mixed updates). The table a very low percentage of accepted $\beta$, less than 10%, while the percentage of accepted $\delta$ is slighly greater (around 22%). On the contrary, when we move from $(\beta_i,\delta_i)$ to $(\beta_i^{\star},\delta_i^{\star})$, the exchange algorithm accepts more than the half of the candidates.
+
+&nbsp;
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+acc = rbind(round(result$accept_beta*100,2), round(result$accept_delta*100,2), round(result$accept_mixed*100,2))
+rownames(acc) = c("beta", "delta", "mixed")
+colnames(acc)=c("accepted (%)")
+kable(acc) %>%
+  add_header_above(c("accepted candidates"=2))
+```
+
+
+\newpage
+In the table below the estimated coefficients are given and they are also shown with 50% and 90% inner intervals in the following plots. 
+At the end it's also given a diagnostic view of both the coefficients' distributions, that roughly respect normality, and the trace plots of the simulations.
+
+&nbsp;
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+res = cbind(round(colMeans(result$posterior_beta),4), round(colMeans(result$posterior_delta),4))
+rownames(res) = c("intercept","German","schooling","vocational education","University","age","rural","age at marriage","Catholic","Muslim","Protestant")
+colnames(res)=c("beta", "delta")
+kable(res) %>%
+  add_header_above(c(" ","regression coefficients"=2))
+```
+
+&nbsp;
+
+&nbsp;
+
+
+```{r fig1, fig.height = 4, fig.width = 5, echo=FALSE, message=FALSE, warning=FALSE}
+
+par(mfrow=c(2,1))
+color_scheme_set("blue")
+mcmc_intervals(mcmc_beta)+ggplot2::ggtitle("Regression coefficients for"~ beta)+xlab("x")+theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), axis.title.x = element_text(size = 14))
+
+```
+
+
+
+```{r fig2, fig.height = 4, fig.width = 5, echo=FALSE, message=FALSE, warning=FALSE}
+color_scheme_set("blue")
+mcmc_intervals(mcmc_delta)+ggplot2::ggtitle("Regression coefficients for"~ delta)+xlab("x")+theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), axis.title.x = element_text(size = 14))
+```
+
+\newpage
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Load packages for MCMC diagnostics
+mcmc_beta  <- mcmc(result$posterior_beta)
+mcmc_delta <- mcmc(result$posterior_delta)
+colnames(mcmc_beta) <-  c("intercept","German","schooling","vocational education","University","age","rural","age at marriage","Catholic","Muslim","Protestant")
+colnames(mcmc_delta) <- colnames(mcmc_beta)
+# Plot traceplots of regression coefficients
+color_scheme_set("brightblue")
+mcmc_hist(mcmc_beta)+ggplot2::ggtitle("Marginal posterior distribution of "~ beta ~ "coefficients" )+theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 15))
+```
+
+&nbsp;
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+color_scheme_set("brightblue")
+mcmc_trace(mcmc_beta)+ggplot2::ggtitle("Trace plots of "~ beta ~ "coefficients")+theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 15))+scale_x_continuous(breaks=c(1000,5000,10000))
+```
+
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+color_scheme_set("viridis")
+mcmc_hist(mcmc_delta)+ggplot2::ggtitle("Marginal posterior distribution of "~ delta ~ "coefficients")+theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 15))
+```
+
+&nbsp;
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+color_scheme_set("viridis")
+mcmc_trace(mcmc_beta)+ggplot2::ggtitle("Trace plots of "~ delta ~ "coefficients")+theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 15))+scale_x_continuous(breaks=c(1000,5000,10000))
+```
+
+
+
+\newpage
+# References
